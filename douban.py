@@ -6,6 +6,7 @@ import traceback
 import time
 import pymysql
 
+
 def get_urls():
     pages = np.arange(0, 250, 25)
     urls = []
@@ -24,14 +25,14 @@ def get_contents(url, headers):
     return html
 
 
-def get_movies(urls,headers):
-    name_list=[]
-    details_list=[]
-    comment_list=[]
-    describe_list=[]
-    rate_list=[]
+def get_movies(urls, headers):
+    name_list = []
+    details_list = []
+    comment_list = []
+    describe_list = []
+    rate_list = []
     for i in urls:
-        r = get_contents(i,headers)
+        r = get_contents(i, headers)
         soup = BeautifulSoup(r, 'html.parser')
         for i in soup.select('#content > div > div.article > ol div > div.info > div.hd > a > span:nth-child(1)'):
             # print(i.get_text())
@@ -41,11 +42,11 @@ def get_movies(urls,headers):
             text = "".join(i.get_text().split())
             details_list.append(text)
         for i in soup.select('#content > div > div.article > ol  div > div.info > div.bd > div > span:nth-child(4)'):
-           # print(i.get_text())
-           comment_list.append(i.get_text())
+            # print(i.get_text())
+            comment_list.append(i.get_text())
         for i in soup.select('#content > div > div.article > ol  div > div.info > div.bd > div > span.rating_num'):
-           # print(i.get_text())
-           rate_list.append(float(i.get_text()))
+            # print(i.get_text())
+            rate_list.append(float(i.get_text()))
         # for i in soup.select('#content > div > div.article > ol  div > div.info > div.bd > p.quote > span'):
         #     # print(i.get_text())
         #     describe_list.append(i.get_text())
@@ -63,10 +64,13 @@ def get_movies(urls,headers):
         # img_list = [x.get('src') for x in soup.select(img_selector)]
         # print(len(content_list))
         time.sleep(0.2)
-    contents = list(zip(name_list,details_list,comment_list,rate_list))
+    contents = list(zip(name_list, details_list, comment_list, rate_list))
     if check_sql() == 0:
         print("following insert data")
         insert_data(contents)
+    return name_list
+
+
 def make_dir(path):
     folder = os.path.exists(path)
     if not folder:
@@ -77,20 +81,38 @@ def make_dir(path):
         print('--- folder exists ---')
 
 
-def download_img(url, headers, name, path):
+def download_img(urls, headers, name, path):
     os.chdir(path)
-    r = requests.get(url, headers=headers)
+    src_list = []
+    jpg_list = []
     try:
-        with open(name, "wb")as f:
-            f.write(r.content)
+        for i in urls:
+            r = get_contents(i, headers)
+            soup = BeautifulSoup(r, 'html.parser')
+            for i in soup.select('#content > div > div.article > ol  div > div.pic > a > img'):
+                src_list.append(i.get('src'))
+        for i in name:
+            jpg_name = i + ".jpg"
+            jpg_list.append(jpg_name)
+        contents = list(zip(jpg_list, src_list))
+        if len(os.listdir(path)) == 0:
+            for i in contents:
+                r = requests.get(i[1], headers=headers)
+                with open(i[0], "wb")as f:
+                    f.write(r.content)
+            print("--- finished {}---".format(len(os.listdir(path))))
+        else:
+            print("--- img exist ---")
     except:
-        print("Error!")
+        traceback.print_exc()
+
 
 def close_conn(conn, cursor):
     if cursor:
         cursor.close()
     if conn:
         conn.close()
+
 
 def get_conn():
     """
@@ -106,6 +128,7 @@ def get_conn():
     cursor = conn.cursor()  # 执行完毕返回的结果集默认以元组显示
     return conn, cursor
 
+
 def insert_data(contents):
     cursor = None
     conn = None
@@ -113,7 +136,7 @@ def insert_data(contents):
         print(f"{time.asctime()}开始插入数据")
         conn, cursor = get_conn()
         sql = "insert into douban (name,details,comment,rate) values (%s,%s,%s,%s)"
-        cursor.executemany(sql,contents)
+        cursor.executemany(sql, contents)
         conn.commit()
         print(f"{time.asctime()}插入完毕")
     except:
@@ -121,11 +144,12 @@ def insert_data(contents):
     finally:
         close_conn(conn, cursor)
 
+
 def check_sql():
     cursor = None
     conn = None
     try:
-        conn,cursor = get_conn()
+        conn, cursor = get_conn()
         sql = "select count(*) from douban"
         cursor.execute(sql)
         data = cursor.fetchall()
@@ -134,15 +158,18 @@ def check_sql():
             data = 1
         else:
             data = 0
-    except :
-        print('Error!')
+    except:
+        traceback.print_exc()
     finally:
         close_conn(conn, cursor)
     return data
 
-headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36'}
+
+headers = {
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36'}
 path = 'C:\\Users\\12370\\Desktop\\douban\\img'
 if __name__ == '__main__':
     urls = get_urls()
     make_dir(path)
-    get_movies(urls,headers)
+    name = get_movies(urls, headers)
+    download_img(urls, headers, name, path)
